@@ -49,33 +49,36 @@ export default async function handler(req, res) {
     }
     console.log('API key found for image generation');
 
-    // Gemini APIクライアントの初期化（プロンプトから画像記述を生成）
+    // Gemini 2.0 Flash実験版で画像生成
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ 
-      model: 'gemini-1.5-flash',
-      systemInstruction: `あなたは商品画像の詳細な説明を生成する専門家です。
-      ユーザーのプロンプトと商品画像を基に、その商品を使用した魅力的なシーンの詳細な描写を日本語で生成してください。
-      描写には以下を含めてください：
-      1. 商品の具体的な使用シーン
-      2. 背景や環境の詳細
-      3. 光の当たり方や色調
-      4. 商品の配置や構図
-      5. 全体的な雰囲気やムード
-      
-      回答はプレーンテキストで、説明文のみを返してください。`
+      model: 'gemini-2.0-flash-exp',
+      generationConfig: {
+        temperature: 1.0,
+        topP: 0.95,
+        topK: 40,
+        maxOutputTokens: 8192,
+        responseMimeType: 'image/jpeg'
+      }
     });
 
-    // プロンプトの準備
-    const finalPrompt = `次のコンセプトで商品画像のシーンを詳細に描写してください: ${prompt}
-    登場人物が写る場合は日本人の設定でお願いします。
-    正方形の構図を想定して描写してください。`;
+    // プロンプトの準備（日本語で詳細な指示）
+    const finalPrompt = `${prompt}
+    
+    重要な指示：
+    - 商品を魅力的に見せる高品質な画像を生成してください
+    - 正方形（1:1）のアスペクト比で生成してください
+    - 明るく清潔感のある照明を使用してください
+    - 商品の特徴がよく分かるような構図にしてください
+    - 日本のEコマース（Amazon）に適したスタイルで生成してください
+    - 人物が含まれる場合は日本人の設定でお願いします`;
     
     // パーツの構築
     const parts = [
       { text: finalPrompt }
     ];
     
-    // 画像データを追加
+    // 参考画像データを追加
     for (const file of files) {
       parts.push({
         inlineData: {
@@ -85,61 +88,92 @@ export default async function handler(req, res) {
       });
     }
 
-    // APIリクエストの送信
-    const result = await model.generateContent({
-      contents: [{
-        parts: parts
-      }],
-      generationConfig: {
-        temperature: 0.8,
-        maxOutputTokens: 1000
+    // リトライロジック
+    let lastError = null;
+    const maxRetries = 3;
+    
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        console.log(`Attempt ${attempt + 1} to generate image`);
+        
+        // APIリクエストの送信
+        const result = await model.generateContent(parts);
+        const response = result.response;
+        
+        // レスポンスから画像データを取得
+        if (response.candidates && response.candidates.length > 0) {
+          const candidate = response.candidates[0];
+          
+          // inlineDataとして画像が返される場合
+          if (candidate.content && candidate.content.parts) {
+            for (const part of candidate.content.parts) {
+              if (part.inlineData && part.inlineData.data) {
+                console.log('Image generated successfully');
+                return res.status(200).json({ 
+                  image: part.inlineData.data
+                });
+              }
+            }
+          }
+          
+          // テキストが返された場合（エラー）
+          const textContent = response.text();
+          if (textContent) {
+            console.error('Model returned text instead of image:', textContent);
+            throw new Error('画像生成に失敗しました。モデルがテキストを返しました。');
+          }
+        }
+        
+        throw new Error('画像データが見つかりませんでした');
+
+      } catch (error) {
+        lastError = error;
+        console.error(`Attempt ${attempt + 1} failed:`, error.message);
+        
+        // レート制限の場合はリトライ
+        if (error.message?.includes('429') && attempt < maxRetries - 1) {
+          const waitTime = Math.min(2000 * Math.pow(2, attempt), 10000);
+          console.log(`Waiting ${waitTime}ms before retry`);
+          await new Promise(resolve => setTimeout(resolve, waitTime));
+          continue;
+        }
+        
+        // その他のエラーまたは最終試行の場合
+        if (attempt === maxRetries - 1) {
+          break;
+        }
       }
-    });
-
-    const response = await result.response;
-    const description = response.text();
-
-    if (!description) {
-      throw new Error('No description generated');
     }
 
-    // プレースホルダー画像データを生成（SVGで説明文を表示）
-    const svgImage = `
-      <svg width="800" height="800" xmlns="http://www.w3.org/2000/svg">
-        <rect width="800" height="800" fill="#f0f0f0"/>
-        <text x="400" y="50" font-family="Arial, sans-serif" font-size="20" font-weight="bold" text-anchor="middle" fill="#333">
-          生成されたシーン説明
-        </text>
-        <foreignObject x="50" y="100" width="700" height="650">
-          <div xmlns="http://www.w3.org/1999/xhtml" style="font-family: Arial, sans-serif; font-size: 16px; line-height: 1.8; color: #333; padding: 20px; background: white; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
-            ${description.replace(/\n/g, '<br/>')}
-          </div>
-        </foreignObject>
-        <text x="400" y="780" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#666">
-          ※ これは画像生成の説明です。実際の画像生成にはImagenやDALL-E等の画像生成AIが必要です
-        </text>
-      </svg>
-    `;
-
-    // SVGをBase64エンコード
-    const base64Image = Buffer.from(svgImage).toString('base64');
-
-    // 成功レスポンス
-    return res.status(200).json({ 
-      image: base64Image,
-      description: description
+    // すべてのリトライが失敗
+    console.error('All retries failed:', lastError);
+    
+    // エラーメッセージの詳細化
+    if (lastError?.message?.includes('429')) {
+      return res.status(429).json({ 
+        error: 'Rate limit exceeded. Please try again later.',
+        details: 'APIのレート制限に達しました。しばらく待ってから再試行してください。'
+      });
+    }
+    
+    if (lastError?.message?.includes('responseMimeType')) {
+      return res.status(500).json({ 
+        error: 'Image generation not supported',
+        details: '現在のAPIキーまたはモデルでは画像生成がサポートされていません。'
+      });
+    }
+    
+    return res.status(500).json({ 
+      error: 'Failed to generate image',
+      details: lastError?.message || '画像生成中にエラーが発生しました。'
     });
 
   } catch (error) {
     console.error('Error in generate-images:', error);
     console.error('Error stack:', error.stack);
     
-    if (error.message?.includes('429')) {
-      return res.status(429).json({ error: 'Rate limit exceeded. Please try again later.' });
-    }
-    
     return res.status(500).json({ 
-      error: 'Failed to generate image description',
+      error: 'Internal server error',
       details: error.message || 'Unknown error occurred'
     });
   }

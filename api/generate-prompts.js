@@ -54,7 +54,7 @@ export default async function handler(req, res) {
     // Gemini APIクライアントの初期化
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ 
-      model: 'gemini-1.5-flash',
+      model: 'gemini-2.0-flash-exp',
       systemInstruction: 'あなたは日本のAmazonの商品ページを作成するプロのマーケティング担当者です。提供された商品画像を分析し、購買意欲を高めるような魅力的な商品紹介画像を生成するための、具体的なプロンプトを4つ提案してください。プロンプトは、商品の利用シーン、雰囲気、ターゲット顧客がイメージできるような内容にしてください。返答は必ずJSON形式の配列のみで、他のテキストは含めないでください。例: ["プロンプト1", "プロンプト2", "プロンプト3", "プロンプト4"]'
     });
 
