@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI商品画像ジェネレーター</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .fade-in {
+            animation: fadeIn ease 1s;
+        }
+        @keyframes fadeIn {
+            0% { opacity:0; }
+            100% { opacity:1; }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800">
+    <div class="container mx-auto p-4 sm:p-6 md:p-8 max-w-5xl">
+        <header class="text-center mb-8">
+            <h1 class="text-3xl sm:text-4xl font-bold text-gray-900">AI商品画像ジェネレーター</h1>
+            <p class="text-gray-600 mt-2">複数の商品画像をアップロードし、まとめて紹介画像を生成できます。</p>
+        </header>
+
+        <main class="bg-white rounded-2xl shadow-lg p-6 md:p-8">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <!-- 左側: 入力エリア -->
+                <div class="flex flex-col space-y-6">
+                    <div>
+                        <label class="block text-lg font-semibold mb-2 text-gray-700">1. 商品画像をアップロード</label>
+                        <div id="image-drop-area" class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center cursor-pointer hover:border-blue-500 hover:bg-blue-50 transition-colors">
+                            <input type="file" id="image-upload" accept="image/*" class="hidden" multiple>
+                            <div id="previews-container" class="grid grid-cols-3 sm:grid-cols-4 gap-4"></div>
+                            <div id="upload-prompt">
+                                <svg class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48" aria-hidden="true"><path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /></svg>
+                                <p class="mt-2 text-sm text-gray-600">ここにファイルをドラッグ＆ドロップ<br>またはクリックしてファイルを選択</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div id="generation-options" class="hidden">
+                        <label class="block text-lg font-semibold mb-2 text-gray-700">2. 生成モードを選択</label>
+                        <div class="flex space-x-4 rounded-lg bg-gray-100 p-1">
+                            <label class="flex-1 text-center">
+                                <input type="radio" name="generation-mode" value="separate" class="sr-only" checked>
+                                <span class="mode-label block w-full p-2 rounded-md cursor-pointer bg-white shadow">個別</span>
+                            </label>
+                            <label class="flex-1 text-center">
+                                <input type="radio" name="generation-mode" value="combine" class="sr-only">
+                                <span class="mode-label block w-full p-2 rounded-md cursor-pointer">まとめて</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="space-y-2">
+                        <button id="generate-btn" class="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-300 transition-all duration-300 transform hover:scale-105 disabled:bg-gray-400 disabled:cursor-not-allowed disabled:scale-100" disabled>
+                            <span id="generate-btn-text">画像を生成</span>
+                        </button>
+                        <button id="download-all-btn" class="w-full bg-green-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-green-700 focus:outline-none focus:ring-4 focus:ring-green-300 transition-all duration-300 transform hover:scale-105 disabled:bg-gray-400 disabled:cursor-not-allowed disabled:scale-100 hidden" disabled>
+                            まとめてダウンロード
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 右側: 出力エリア -->
+                <div class="bg-gray-50 rounded-lg p-6 min-h-[400px]">
+                    <div id="output-container" class="w-full h-full">
+                        <div id="loading-indicator" class="hidden flex-col items-center">
+                            <div class="loader"></div>
+                            <p id="loading-text" class="mt-4 text-gray-600">AIが画像を生成中です...</p>
+                        </div>
+                        <div id="result-grid" class="w-full grid grid-cols-2 gap-4"></div>
+                        <div id="placeholder-text" class="text-gray-500 text-center h-full flex flex-col justify-center items-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="mx-auto h-16 w-16 text-gray-300" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+                            <p class="mt-2">ここに生成された画像が表示されます</p>
+                        </div>
+                    </div>
+                    <div id="error-message" class="hidden text-red-500 mt-4 p-3 bg-red-100 rounded-lg text-center"></div>
+                </div>
+            </div>
+        </main>
+
+        <footer class="text-center mt-8 text-sm text-gray-500">
+            <p>&copy; 2024 AI Product Image Generator. All Rights Reserved.</p>
+        </footer>
+    </div>
+
+    <script>
+        // DOM要素の取得
+        const imageUpload = document.getElementById('image-upload');
+        const imageDropArea = document.getElementById('image-drop-area');
+        const previewsContainer = document.getElementById('previews-container');
+        const uploadPrompt = document.getElementById('upload-prompt');
+        const generationOptions = document.getElementById('generation-options');
+        const generateBtn = document.getElementById('generate-btn');
+        const generateBtnText = document.getElementById('generate-btn-text');
+        const downloadAllBtn = document.getElementById('download-all-btn');
+        const loadingIndicator = document.getElementById('loading-indicator');
+        const loadingText = document.getElementById('loading-text');
+        const resultGrid = document.getElementById('result-grid');
+        const placeholderText = document.getElementById('placeholder-text');
+        const errorMessage = document.getElementById('error-message');
+        
+        let uploadedFiles = [];
+
+        // イベントリスナー設定
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(e => imageDropArea.addEventListener(e, preventDefaults, false));
+        ['dragenter', 'dragover'].forEach(e => imageDropArea.addEventListener(e, () => imageDropArea.classList.add('bg-blue-100', 'border-blue-600'), false));
+        ['dragleave', 'drop'].forEach(e => imageDropArea.addEventListener(e, () => imageDropArea.classList.remove('bg-blue-100', 'border-blue-600'), false));
+        imageDropArea.addEventListener('drop', handleDrop, false);
+        imageDropArea.addEventListener('click', () => imageUpload.click());
+        imageUpload.addEventListener('change', (e) => handleFiles(e.target.files));
+        generateBtn.addEventListener('click', handleImageGeneration);
+        generationOptions.addEventListener('change', updateButtonText);
+        downloadAllBtn.addEventListener('click', handleDownloadAll);
+
+
+        function preventDefaults(e) { e.preventDefault(); e.stopPropagation(); }
+        function handleDrop(e) { handleFiles(e.dataTransfer.files); }
+
+        async function handleFiles(files) {
+            if (files.length === 0) return;
+            
+            uploadPrompt.classList.add('hidden');
+            previewsContainer.innerHTML = '';
+            uploadedFiles = [];
+            generateBtn.disabled = true;
+            
+            const fileList = Array.from(files).filter(f => f.type.startsWith('image/'));
+
+            for (const file of fileList) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    uploadedFiles.push({ name: file.name, mimeType: file.type, base64: e.target.result.split(',')[1] });
+                    const img = document.createElement('img');
+                    img.src = e.target.result;
+                    img.className = 'w-full h-auto rounded-md shadow-sm';
+                    previewsContainer.appendChild(img);
+                    if (uploadedFiles.length === fileList.length) {
+                        updateUIBasedOnSelection();
+                    }
+                };
+                reader.readAsDataURL(file);
+            }
+            hideError();
+        }
+
+        function updateUIBasedOnSelection() {
+            if (uploadedFiles.length > 1) {
+                generationOptions.classList.remove('hidden');
+            } else {
+                generationOptions.classList.add('hidden');
+            }
+            generateBtn.disabled = false;
+            updateButtonText();
+        }
+        
+        function updateButtonText() {
+            const mode = document.querySelector('input[name="generation-mode"]:checked').value;
+            document.querySelectorAll('.mode-label').forEach(el => {
+                el.classList.remove('bg-white', 'shadow');
+            });
+            document.querySelector(`input[value="${mode}"] + .mode-label`).classList.add('bg-white', 'shadow');
+
+            if (uploadedFiles.length === 0) return;
+            
+            if (mode === 'separate') {
+                generateBtnText.textContent = `${uploadedFiles.length}商品分の画像を生成 (${uploadedFiles.length * 4}枚)`;
+            } else {
+                generateBtnText.textContent = `まとめて1つのシーンを生成 (4枚)`;
+            }
+        }
+
+
+        async function handleImageGeneration() {
+            if (uploadedFiles.length === 0) { showError('画像をアップロードしてください。'); return; }
+            const mode = document.querySelector('input[name="generation-mode"]:checked').value;
+
+            hideError();
+            
+            if (mode === 'combine' || uploadedFiles.length === 1) {
+                await generateCombinedImages();
+            } else {
+                await generateSeparateImages();
+            }
+        }
+        
+        async function generateSeparateImages() {
+            setLoading(true, 0, uploadedFiles.length);
+            let fileCounter = 0;
+            for (const file of uploadedFiles) {
+                fileCounter++;
+                setLoading(true, fileCounter, uploadedFiles.length);
+                try {
+                    const suggestions = await callPromptGenerationAPI([file]);
+                    const promises = suggestions.map(p => callImageGenerationAPI(p, [file]));
+                    const generatedImages = await Promise.all(promises);
+                    displayImages(generatedImages, file.name);
+                } catch (error) {
+                    console.error(`Error for ${file.name}:`, error);
+                    showError(`${file.name}の生成に失敗: ${error.message}`);
+                }
+            }
+            setLoading(false);
+        }
+        
+        async function generateCombinedImages() {
+            setLoading(true, 1, 1);
+            try {
+                const suggestions = await callPromptGenerationAPI(uploadedFiles);
+                const promises = suggestions.map(p => callImageGenerationAPI(p, uploadedFiles));
+                const generatedImages = await Promise.all(promises);
+                displayImages(generatedImages, 'combined-scene');
+            } catch (error) {
+                console.error(`Error for combined generation:`, error);
+                showError(`まとめて生成に失敗: ${error.message}`);
+            }
+            setLoading(false);
+        }
+        
+        function displayImages(base64Images, baseName) {
+            base64Images.forEach((base64, index) => {
+                const imgContainer = document.createElement('div');
+                imgContainer.className = "fade-in relative group";
+                const img = document.createElement('img');
+                img.src = `data:image/png;base64,${base64}`;
+                img.alt = "生成された画像";
+                img.className = "w-full h-auto rounded-lg shadow-md";
+                const downloadLink = document.createElement('a');
+                downloadLink.href = img.src;
+                downloadLink.download = `${baseName.split('.')[0]}-style-${index + 1}.png`;
+                downloadLink.className = "absolute bottom-2 right-2 bg-white/80 p-2 rounded-full hover:bg-white transition-opacity opacity-0 group-hover:opacity-100 cursor-pointer";
+                downloadLink.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-gray-800"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>`;
+                imgContainer.appendChild(img);
+                imgContainer.appendChild(downloadLink);
+                resultGrid.appendChild(imgContainer);
+            });
+            
+            if (resultGrid.childElementCount > 0) {
+                downloadAllBtn.classList.remove('hidden');
+                downloadAllBtn.disabled = false;
+            }
+        }
+        
+        async function handleDownloadAll() {
+            const images = resultGrid.querySelectorAll('img');
+            if (images.length === 0) {
+                showError('ダウンロードする画像がありません。');
+                return;
+            }
+
+            downloadAllBtn.disabled = true;
+            downloadAllBtn.textContent = 'ZIP作成中...';
+
+            const zip = new JSZip();
+            
+            for (let i = 0; i < images.length; i++) {
+                const img = images[i];
+                const response = await fetch(img.src);
+                const blob = await response.blob();
+                const fileName = img.nextElementSibling.download || `image-${i + 1}.png`;
+                zip.file(fileName, blob);
+            }
+
+            zip.generateAsync({ type: "blob" })
+                .then(function(content) {
+                    const link = document.createElement('a');
+                    link.href = URL.createObjectURL(content);
+                    link.download = "generated-images.zip";
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                })
+                .catch(err => {
+                    showError('ZIPファイルの作成に失敗しました。');
+                    console.error(err);
+                })
+                .finally(() => {
+                    downloadAllBtn.disabled = false;
+                    downloadAllBtn.textContent = 'まとめてダウンロード';
+                });
+        }
+
+        // Vercelバックエンドを呼び出すように修正
+        async function callPromptGenerationAPI(filesData) {
+            const apiUrl = `/api/generate-prompts`;
+            
+            const payload = {
+                files: filesData
+            };
+
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    const errorResult = await response.json().catch(() => ({ error: 'Unknown error' }));
+                    throw new Error(errorResult.error || `API Error: ${response.status}`);
+                }
+                
+                return await response.json();
+            } catch (error) {
+                console.error('Prompt generation error:', error);
+                throw new Error(`プロンプト生成に失敗しました: ${error.message}`);
+            }
+        }
+
+        async function callImageGenerationAPI(prompt, filesData) {
+            const apiUrl = `/api/generate-images`;
+            
+            const payload = {
+                prompt: prompt,
+                files: filesData
+            };
+
+            // リトライロジック
+            for (let attempt = 0; attempt < 5; attempt++) {
+                try {
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (response.ok) {
+                        const result = await response.json();
+                        if (result.image) {
+                            return result.image;
+                        }
+                        throw new Error('No image data in response');
+                    }
+                    
+                    // レート制限やサーバーエラーの場合はリトライ
+                    if (response.status === 429 || response.status >= 500) {
+                        if (attempt < 4) {
+                            const waitTime = Math.min(1000 * Math.pow(2, attempt), 10000);
+                            await new Promise(resolve => setTimeout(resolve, waitTime));
+                            continue;
+                        }
+                    }
+
+                    const errorResult = await response.json().catch(() => ({ error: 'Unknown error' }));
+                    throw new Error(errorResult.error || `API Error: ${response.status}`);
+                    
+                } catch (error) {
+                    if (attempt === 4) {
+                        console.error('Image generation error:', error);
+                        throw new Error(`画像生成に失敗しました: ${error.message}`);
+                    }
+                    // ネットワークエラーなどの場合もリトライ
+                    const waitTime = Math.min(1000 * Math.pow(2, attempt), 10000);
+                    await new Promise(resolve => setTimeout(resolve, waitTime));
+                }
+            }
+        }
+
+        function setLoading(isLoading, current, total) {
+            generateBtn.disabled = isLoading;
+            loadingIndicator.classList.toggle('hidden', !isLoading);
+            if(isLoading) {
+                placeholderText.classList.add('hidden');
+                const mode = document.querySelector('input[name="generation-mode"]:checked').value;
+                if(mode === 'separate' && total > 1) {
+                    loadingText.textContent = `画像を生成中... (${current}/${total}商品目)`;
+                } else {
+                    loadingText.textContent = `画像を生成中...`;
+                }
+            } else {
+                 updateButtonText();
+            }
+        }
+        
+        function showError(message) {
+            errorMessage.textContent = message;
+            errorMessage.classList.remove('hidden');
+        }
+
+        function hideError() {
+            errorMessage.classList.add('hidden');
+        }
+
+    </script>
+</body>
+</html>

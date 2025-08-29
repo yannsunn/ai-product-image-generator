@@ -1,0 +1,19 @@
+{
+  "name": "ai-product-image-generator",
+  "version": "1.0.0",
+  "description": "AI商品画像ジェネレーター - Vercelデプロイ版",
+  "scripts": {
+    "dev": "vercel dev",
+    "build": "echo 'No build required'",
+    "deploy": "vercel --prod"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.21.0"
+  },
+  "devDependencies": {
+    "vercel": "^32.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
