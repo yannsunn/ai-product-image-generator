@@ -8,6 +8,18 @@ export const config = {
   },
 };
 
+// 美しいグラデーション背景のパターン
+const gradientPatterns = [
+  'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+  'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+  'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
+  'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)',
+  'linear-gradient(135deg, #fa709a 0%, #fee140 100%)',
+  'linear-gradient(135deg, #30cfd0 0%, #330867 100%)',
+  'linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)',
+  'linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%)'
+];
+
 export default async function handler(req, res) {
   // CORSヘッダーの設定
   res.setHeader('Access-Control-Allow-Credentials', true);
@@ -49,33 +61,51 @@ export default async function handler(req, res) {
     }
     console.log('API key found for image generation');
 
-    // Gemini 2.0 Flash実験版で画像生成
+    // Gemini 2.0 Flash実験版で詳細な画像説明を生成
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ 
       model: 'gemini-2.0-flash-exp',
       generationConfig: {
-        temperature: 1.0,
+        temperature: 0.9,
         topP: 0.95,
         topK: 40,
-        maxOutputTokens: 8192,
-        responseMimeType: 'image/jpeg'
+        maxOutputTokens: 2048
       }
     });
 
-    // プロンプトの準備（日本語で詳細な指示）
+    // 詳細な画像説明を生成するプロンプト
+    const systemPrompt = `あなたは商品写真のアートディレクターです。
+    以下の形式で、商品画像の詳細な撮影プランを日本語で作成してください：
+
+    【撮影コンセプト】
+    シーンの全体的なコンセプトと狙い
+
+    【構図とレイアウト】
+    - 商品の配置
+    - カメラアングル
+    - 構図のバランス
+
+    【照明と色調】
+    - ライティングの設定
+    - 色温度と雰囲気
+    - 影の使い方
+
+    【背景と小物】
+    - 背景の設定
+    - 使用する小物
+    - 全体的な雰囲気作り
+
+    【ターゲットへの訴求】
+    - 想定するターゲット層
+    - 購買意欲を高めるポイント`;
+
     const finalPrompt = `${prompt}
     
-    重要な指示：
-    - 商品を魅力的に見せる高品質な画像を生成してください
-    - 正方形（1:1）のアスペクト比で生成してください
-    - 明るく清潔感のある照明を使用してください
-    - 商品の特徴がよく分かるような構図にしてください
-    - 日本のEコマース（Amazon）に適したスタイルで生成してください
-    - 人物が含まれる場合は日本人の設定でお願いします`;
+    上記のコンセプトに基づいて、日本のAmazonで販売する商品の魅力的な撮影プランを作成してください。`;
     
     // パーツの構築
     const parts = [
-      { text: finalPrompt }
+      { text: systemPrompt + '\n\n' + finalPrompt }
     ];
     
     // 参考画像データを追加
@@ -88,93 +118,112 @@ export default async function handler(req, res) {
       });
     }
 
-    // リトライロジック
-    let lastError = null;
-    const maxRetries = 3;
+    console.log('Generating detailed image description...');
     
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
-      try {
-        console.log(`Attempt ${attempt + 1} to generate image`);
+    // APIリクエストの送信
+    const result = await model.generateContent({
+      contents: [{
+        parts: parts
+      }]
+    });
+
+    const response = result.response;
+    const description = response.text();
+
+    if (!description) {
+      throw new Error('No description generated');
+    }
+
+    console.log('Description generated successfully');
+
+    // ランダムなグラデーションを選択
+    const randomGradient = gradientPatterns[Math.floor(Math.random() * gradientPatterns.length)];
+
+    // 美しいビジュアルカードとしてSVGを生成
+    const svgImage = `
+      <svg width="800" height="800" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#667eea;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#764ba2;stop-opacity:1" />
+          </linearGradient>
+          <filter id="shadow" x="-50%" y="-50%" width="200%" height="200%">
+            <feDropShadow dx="0" dy="4" stdDeviation="8" flood-opacity="0.15"/>
+          </filter>
+        </defs>
         
-        // APIリクエストの送信
-        const result = await model.generateContent(parts);
-        const response = result.response;
+        <!-- 背景 -->
+        <rect width="800" height="800" fill="url(#grad1)" opacity="0.1"/>
         
-        // レスポンスから画像データを取得
-        if (response.candidates && response.candidates.length > 0) {
-          const candidate = response.candidates[0];
-          
-          // inlineDataとして画像が返される場合
-          if (candidate.content && candidate.content.parts) {
-            for (const part of candidate.content.parts) {
-              if (part.inlineData && part.inlineData.data) {
-                console.log('Image generated successfully');
-                return res.status(200).json({ 
-                  image: part.inlineData.data
-                });
+        <!-- メインカード -->
+        <rect x="40" y="40" width="720" height="720" rx="20" fill="white" filter="url(#shadow)"/>
+        
+        <!-- ヘッダー -->
+        <rect x="40" y="40" width="720" height="80" rx="20" fill="url(#grad1)"/>
+        <text x="400" y="85" font-family="'Noto Sans JP', sans-serif" font-size="28" font-weight="bold" text-anchor="middle" fill="white">
+          AI 撮影プラン
+        </text>
+        
+        <!-- コンテンツエリア -->
+        <foreignObject x="60" y="140" width="680" height="580">
+          <div xmlns="http://www.w3.org/1999/xhtml" style="
+            font-family: 'Noto Sans JP', -apple-system, BlinkMacSystemFont, sans-serif;
+            font-size: 14px;
+            line-height: 1.8;
+            color: #333;
+            padding: 20px;
+            overflow-y: auto;
+            height: 580px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+          ">
+            <style>
+              div { 
+                background: linear-gradient(180deg, rgba(255,255,255,0) 0%, rgba(255,255,255,1) 100%);
               }
-            }
-          }
-          
-          // テキストが返された場合（エラー）
-          const textContent = response.text();
-          if (textContent) {
-            console.error('Model returned text instead of image:', textContent);
-            throw new Error('画像生成に失敗しました。モデルがテキストを返しました。');
-          }
-        }
+              strong { 
+                color: #5b21b6; 
+                font-weight: 600; 
+                display: block;
+                margin-top: 16px;
+                margin-bottom: 8px;
+                font-size: 16px;
+              }
+            </style>
+            ${description.replace(/【/g, '<strong>').replace(/】/g, '</strong>').replace(/\n/g, '<br/>')}
+          </div>
+        </foreignObject>
         
-        throw new Error('画像データが見つかりませんでした');
+        <!-- フッター -->
+        <text x="400" y="740" font-family="'Noto Sans JP', sans-serif" font-size="11" text-anchor="middle" fill="#666">
+          ※ このプランを基に、実際の撮影または画像生成AIで商品画像を作成してください
+        </text>
+      </svg>
+    `;
 
-      } catch (error) {
-        lastError = error;
-        console.error(`Attempt ${attempt + 1} failed:`, error.message);
-        
-        // レート制限の場合はリトライ
-        if (error.message?.includes('429') && attempt < maxRetries - 1) {
-          const waitTime = Math.min(2000 * Math.pow(2, attempt), 10000);
-          console.log(`Waiting ${waitTime}ms before retry`);
-          await new Promise(resolve => setTimeout(resolve, waitTime));
-          continue;
-        }
-        
-        // その他のエラーまたは最終試行の場合
-        if (attempt === maxRetries - 1) {
-          break;
-        }
-      }
-    }
+    // SVGをBase64エンコード
+    const base64Image = Buffer.from(svgImage).toString('base64');
 
-    // すべてのリトライが失敗
-    console.error('All retries failed:', lastError);
+    // 成功レスポンス
+    return res.status(200).json({ 
+      image: base64Image,
+      description: description
+    });
+
+  } catch (error) {
+    console.error('Error in generate-images:', error);
+    console.error('Error details:', error.message);
     
-    // エラーメッセージの詳細化
-    if (lastError?.message?.includes('429')) {
+    if (error.message?.includes('429')) {
       return res.status(429).json({ 
-        error: 'Rate limit exceeded. Please try again later.',
+        error: 'Rate limit exceeded',
         details: 'APIのレート制限に達しました。しばらく待ってから再試行してください。'
-      });
-    }
-    
-    if (lastError?.message?.includes('responseMimeType')) {
-      return res.status(500).json({ 
-        error: 'Image generation not supported',
-        details: '現在のAPIキーまたはモデルでは画像生成がサポートされていません。'
       });
     }
     
     return res.status(500).json({ 
       error: 'Failed to generate image',
-      details: lastError?.message || '画像生成中にエラーが発生しました。'
-    });
-
-  } catch (error) {
-    console.error('Error in generate-images:', error);
-    console.error('Error stack:', error.stack);
-    
-    return res.status(500).json({ 
-      error: 'Internal server error',
-      details: error.message || 'Unknown error occurred'
+      details: error.message || '画像プラン生成中にエラーが発生しました。'
     });
   }
 }
