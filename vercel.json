@@ -1,4 +1,6 @@
 {
+  "buildCommand": "echo 'No build required'",
+  "outputDirectory": ".",
   "functions": {
     "api/generate-prompts.js": {
       "maxDuration": 30
