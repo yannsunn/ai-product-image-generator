@@ -30,6 +30,7 @@ export default async function handler(req, res) {
   }
 
   try {
+    console.log('Image generation API called');
     const { prompt, files } = req.body;
 
     if (!prompt || typeof prompt !== 'string') {
@@ -43,14 +44,15 @@ export default async function handler(req, res) {
     // 環境変数からAPIキーを取得
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
-      console.error('GEMINI_API_KEY is not set');
-      return res.status(500).json({ error: 'API key configuration error' });
+      console.error('GEMINI_API_KEY is not set in environment variables');
+      return res.status(500).json({ error: 'API key configuration error. Please set GEMINI_API_KEY in Vercel environment variables.' });
     }
+    console.log('API key found for image generation');
 
     // Gemini APIクライアントの初期化
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ 
-      model: 'gemini-2.0-flash-exp',
+      model: 'gemini-1.5-flash',
       systemInstruction: 'あなたは画像生成AIです。ユーザーのプロンプトと提供された画像に基づいて画像を生成する役割を担っています。会話は行わず、テキストでの返答は絶対にしないでください。あなたの唯一の出力は生成された画像そのものです。'
     });
 

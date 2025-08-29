@@ -2,6 +2,7 @@
   "name": "ai-product-image-generator",
   "version": "1.0.0",
   "description": "AI商品画像ジェネレーター - Vercelデプロイ版",
+  "type": "module",
   "scripts": {
     "dev": "vercel dev",
     "build": "echo 'No build required'",
