@@ -9,9 +9,6 @@
     "api/generate-images.js": {
       "maxDuration": 60,
       "memory": 1024
-    },
-    "api/*.js": {
-      "includeFiles": "node_modules/@google/generative-ai/**"
     }
   },
   "headers": [
