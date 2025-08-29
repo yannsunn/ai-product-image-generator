@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI商品画像ジェネレーター</title>
+    <link rel="icon" type="image/svg+xml" href="/public/favicon.svg">
+    <link rel="alternate icon" href="/favicon.ico">
     <!-- Tailwind CSS CDN - Development only. For production, use PostCSS or CLI -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -136,19 +138,19 @@
         function preventDefaults(e) { e.preventDefault(); e.stopPropagation(); }
         function handleDrop(e) { handleFiles(e.dataTransfer.files); }
 
-        // 画像をリサイズする関数
-        async function resizeImage(base64String, maxWidth = 1024, maxHeight = 1024, quality = 0.8) {
+        // 画像をリサイズする関数（より積極的な圧縮）
+        async function resizeImage(base64String, maxWidth = 800, maxHeight = 800, quality = 0.6) {
             return new Promise((resolve) => {
                 const img = new Image();
                 img.onload = () => {
                     let width = img.width;
                     let height = img.height;
                     
-                    // アスペクト比を保ちながらリサイズ
+                    // アスペクト比を保ちながらリサイズ（より小さいサイズに）
                     if (width > maxWidth || height > maxHeight) {
                         const ratio = Math.min(maxWidth / width, maxHeight / height);
-                        width *= ratio;
-                        height *= ratio;
+                        width = Math.floor(width * ratio);
+                        height = Math.floor(height * ratio);
                     }
                     
                     const canvas = document.createElement('canvas');
@@ -158,9 +160,18 @@
                     const ctx = canvas.getContext('2d');
                     ctx.drawImage(img, 0, 0, width, height);
                     
-                    // JPEGとして圧縮（qualityで品質調整）
+                    // JPEGとして圧縮（より低い品質で小さいファイルサイズに）
                     const resizedBase64 = canvas.toDataURL('image/jpeg', quality);
-                    resolve(resizedBase64.split(',')[1]);
+                    const base64Data = resizedBase64.split(',')[1];
+                    
+                    // Base64文字列のサイズチェック（約500KB以下に制限）
+                    const sizeInBytes = base64Data.length * 0.75;
+                    if (sizeInBytes > 500000 && quality > 0.3) {
+                        // まだ大きすぎる場合は品質を下げて再圧縮
+                        return resizeImage(base64String, maxWidth * 0.8, maxHeight * 0.8, quality - 0.2);
+                    }
+                    
+                    resolve(base64Data);
                 };
                 img.src = `data:image/jpeg;base64,${base64String}`;
             });
@@ -182,8 +193,8 @@
                     // 元のBase64を取得
                     const originalBase64 = e.target.result.split(',')[1];
                     
-                    // 画像をリサイズ（最大1024x1024、品質80%）
-                    const resizedBase64 = await resizeImage(originalBase64, 1024, 1024, 0.8);
+                    // 画像をリサイズ（最大800x800、品質60%）
+                    const resizedBase64 = await resizeImage(originalBase64, 800, 800, 0.6);
                     
                     uploadedFiles.push({ 
                         name: file.name, 
