@@ -64,8 +64,10 @@ export default async function handler(req, res) {
       ? "ここに写っているすべての商品を組み合わせた、魅力的なシーンのプロンプトを4つ提案してください。" 
       : "この商品を分析して、プロンプトを4つ提案してください。";
 
-    // パーツの構築
-    const parts = [textPrompt];
+    // パーツの構築（正しい形式で）
+    const parts = [
+      { text: textPrompt }
+    ];
     
     // 画像データを追加
     for (const file of files) {

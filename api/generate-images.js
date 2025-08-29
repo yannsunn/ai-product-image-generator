@@ -59,8 +59,10 @@ export default async function handler(req, res) {
     // プロンプトの準備
     const finalPrompt = prompt + ' 登場人物が写る場合は日本人でお願いします。正方形の画像で生成してください。';
     
-    // パーツの構築
-    const parts = [finalPrompt];
+    // パーツの構築（正しい形式で）
+    const parts = [
+      { text: finalPrompt }
+    ];
     
     // 画像データを追加
     for (const file of files) {
