@@ -294,7 +294,9 @@
                 const imgContainer = document.createElement('div');
                 imgContainer.className = "fade-in relative group";
                 const img = document.createElement('img');
-                img.src = `data:image/png;base64,${base64}`;
+                // SVG画像の場合はimage/svg+xml、それ以外はPNG
+                const isSvg = base64.includes('svg') || base64.startsWith('PD94bWw') || base64.startsWith('PHN2Zy');
+                img.src = isSvg ? `data:image/svg+xml;base64,${base64}` : `data:image/png;base64,${base64}`;
                 img.alt = "生成された画像";
                 img.className = "w-full h-auto rounded-lg shadow-md";
                 const downloadLink = document.createElement('a');
